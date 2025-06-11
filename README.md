@@ -1,3 +1,3 @@
 # Rest-API-V6
 
-© credits: [RyuuXiao](https://github.com/RyuuXiao))
+© credits: [RyuuXiao](https://github.com/RyuuXiao)
