@@ -183,6 +183,15 @@
           "status": "ready",
           "params": {
             "url": "Masukan URL nya"
+                      }
+        },
+        {
+          "name": "Facebook",
+          "desc": "Download Facebook",
+          "path": "/download/facebook?url=",
+          "status": "ready",
+          "params": {
+            "url": "Masukan URL nya"
           }
         }
       ]
