@@ -1,11 +1,10 @@
 const axios = require('axios');
-const cheerio = require('cheerio');
 
 module.exports = (app) => {
     const creatorName = "RyuuXiao";
 
     app.get('/download/tiktok', async (req, res) => {
-        const { url } = req.query;
+        const { url, format } = req.query; // Bisa "video" atau "audio"
 
         if (!url) {
             return res.status(400).json({
@@ -16,70 +15,62 @@ module.exports = (app) => {
         }
 
         try {
-            // Ambil halaman utama Tikwm.com untuk token
-            const getPage = await axios.get('https://tikwm.com/', {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0'
-                }
-            });
-
-            const $ = cheerio.load(getPage.data);
-            const token = $('input[name="token"]').val();
-
-            if (!token) {
-                return res.status(500).json({
-                    status: false,
-                    creator: creatorName,
-                    message: 'Gagal mengambil token dari Tikwm.com'
-                });
-            }
-
-            // Kirim request ke Tikwm endpoint dengan token & URL
-            const response = await axios.post(
-                'https://tikwm.com/api/',
-                new URLSearchParams({
-                    url: url,
-                    token: token
-                }),
-                {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0',
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    }
-                }
-            );
+            // Panggil API Tikwm seperti di web kamu
+            const apiUrl = `https://www.tikwm.com/api/?url=${encodeURIComponent(url)}&hd=1`;
+            const response = await axios.get(apiUrl);
 
             const data = response.data;
 
-            if (!data || data.status !== 1) {
+            if (!data || data.status !== 1 || !data.data) {
                 return res.status(400).json({
                     status: false,
                     creator: creatorName,
-                    message: data.msg || 'Gagal mendapatkan data video'
+                    message: 'Gagal mengambil data dari API Tikwm'
                 });
             }
 
-            // Kirim hasil ke user
+            const result = {
+                title: data.data.title,
+                cover: data.data.cover,
+                video_no_watermark: data.data.play,
+                video_with_watermark: data.data.wmplay,
+                music: data.data.music,
+                author: data.data.author?.nickname || '',
+                avatar: data.data.author?.avatar || ''
+            };
+
+            // Jika user minta khusus format video/audio saja
+            if (format === 'video') {
+                return res.json({
+                    status: true,
+                    creator: creatorName,
+                    result: {
+                        video: result.video_no_watermark
+                    }
+                });
+            } else if (format === 'audio') {
+                return res.json({
+                    status: true,
+                    creator: creatorName,
+                    result: {
+                        audio: result.music
+                    }
+                });
+            }
+
+            // Jika tidak spesifik, kirim semua
             return res.json({
                 status: true,
                 creator: creatorName,
-                result: {
-                    title: data.data.title,
-                    thumbnail: data.data.cover,
-                    video_no_watermark: data.data.play,
-                    video_with_watermark: data.data.wmplay,
-                    music: data.data.music,
-                    author: data.data.author.nickname,
-                    avatar: data.data.author.avatar
-                }
+                result
             });
 
         } catch (err) {
-            console.error("Scrape TikTok Error:", err.message || err);
-            return res.status(500).json({
+            console.error("TikTok Downloader Error:", err.message || err);
+            res.status(500).json({
                 status: false,
                 creator: creatorName,
-                message: 'Terjadi kesalahan saat mengambil data dari TikTok'
+                message: 'Terjadi kesalahan saat memproses video TikTok'
             });
         }
     });
