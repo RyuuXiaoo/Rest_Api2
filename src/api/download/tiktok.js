@@ -1,76 +1,86 @@
 const axios = require('axios');
+const cheerio = require('cheerio');
 
 module.exports = (app) => {
-    const creatorName = "RyuuXiao"; // Nama creator Anda
+    const creatorName = "RyuuXiao";
 
     app.get('/download/tiktok', async (req, res) => {
-        const { url } = req.query; // Menggunakan 'url' sudah benar
+        const { url } = req.query;
 
-        // Validasi input
         if (!url) {
             return res.status(400).json({
                 status: false,
-                creator: creatorName, // Ditambahkan
+                creator: creatorName,
                 message: 'Parameter url wajib diisi'
             });
         }
 
         try {
-            const apiUrl = `https://zenzzx-api.vercel.app/downloader/tiktok?url=${encodeURIComponent(url)}`;
-            console.log(`Requesting TikTok data from: ${apiUrl}`); // Logging
-
-            // Panggil API eksternal Anda
-            const response = await axios.get(apiUrl, {
+            // Ambil halaman utama Tikwm.com untuk token
+            const getPage = await axios.get('https://tikwm.com/', {
                 headers: {
-                    'User-Agent': 'Mozilla/5.0' // User-Agent standar
-                },
-                timeout: 30000 // Timeout 30 detik
+                    'User-Agent': 'Mozilla/5.0'
+                }
             });
 
-            // Asumsikan response.data dari API eksternal Anda memiliki struktur
-            // seperti { status: true/false, creator: '...', result: {...} }
-            // atau setidaknya memiliki field 'result' jika sukses.
+            const $ = cheerio.load(getPage.data);
+            const token = $('input[name="token"]').val();
 
-            if (response.data && response.data.status === true && typeof response.data.result !== 'undefined') {
-                // Jika API eksternal sukses dan memiliki 'result'
-                res.json({
-                    status: true,
-                    creator: creatorName,       // Creator Anda
-                    result: response.data.result // Ambil 'result' dari API eksternal
-                });
-            } else if (response.data && response.data.status === false) {
-                // Jika API eksternal mengembalikan status error
-                res.status(400).json({ // Atau status lain yang sesuai
+            if (!token) {
+                return res.status(500).json({
                     status: false,
                     creator: creatorName,
-                    message: response.data.message || 'API eksternal TikTok mengembalikan error.'
-                });
-            } else {
-                // Jika struktur respons API eksternal tidak seperti yang diharapkan
-                // tapi bukan error dari axios, kita teruskan saja apa adanya
-                // di dalam result kita untuk penyelidikan.
-                console.warn("Struktur respons tidak terduga dari API eksternal TikTok:", response.data);
-                res.json({
-                    status: true, // Anggap sukses karena ada data, meski aneh
-                    creator: creatorName,
-                    result: response.data
+                    message: 'Gagal mengambil token dari Tikwm.com'
                 });
             }
 
+            // Kirim request ke Tikwm endpoint dengan token & URL
+            const response = await axios.post(
+                'https://tikwm.com/api/',
+                new URLSearchParams({
+                    url: url,
+                    token: token
+                }),
+                {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0',
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    }
+                }
+            );
+
+            const data = response.data;
+
+            if (!data || data.status !== 1) {
+                return res.status(400).json({
+                    status: false,
+                    creator: creatorName,
+                    message: data.msg || 'Gagal mendapatkan data video'
+                });
+            }
+
+            // Kirim hasil ke user
+            return res.json({
+                status: true,
+                creator: creatorName,
+                result: {
+                    title: data.data.title,
+                    thumbnail: data.data.cover,
+                    video_no_watermark: data.data.play,
+                    video_with_watermark: data.data.wmplay,
+                    music: data.data.music,
+                    author: data.data.author.nickname,
+                    avatar: data.data.author.avatar
+                }
+            });
+
         } catch (err) {
-            console.error("TikTok Downloader Error (axios):", err.response?.data || err.message); // Logging
-
-            const statusCode = err.response?.status || 500;
-            const message = err.response?.data?.message || err.message || 'Gagal mengambil data dari API TikTok';
-
-            // Kirim respons error
-            res.status(statusCode).json({
+            console.error("Scrape TikTok Error:", err.message || err);
+            return res.status(500).json({
                 status: false,
-                creator: creatorName, // Ditambahkan
-                message: message
+                creator: creatorName,
+                message: 'Terjadi kesalahan saat mengambil data dari TikTok'
             });
         }
     });
-
-    // Tambahkan rute lain di sini...
 };
